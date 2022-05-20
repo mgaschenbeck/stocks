@@ -1,9 +1,12 @@
 # stock_net
-##Interesting Blog:
+## Interesting Blog:
 https://dennybritz.com/blog/ai-trading
 
-##Interesting Paper Store:
+## Interesting Paper Store:
 https://arxiv.org/list/q-fin.TR/recent
 
-##Interesting compilation of materials:
+## Interesting compilation of materials:
 https://mltraders.wiki/
+
+## Strategy Library:
+https://www.quantconnect.com/tutorials/strategy-library/strategy-library
