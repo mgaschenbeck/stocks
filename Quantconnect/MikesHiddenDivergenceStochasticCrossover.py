@@ -5,9 +5,13 @@ class ReverseFromHighLow(QCAlgorithm):
         self.SetCash(10000)
         
         # Start and end dates for backtest
-        self.SetStartDate(2022,2,1)
+        self.SetStartDate(2018,2,1)
         self.SetEndDate(2022,5,1)
         self.SetBenchmark("SPY")
+
+        #plotting resolution:
+        self.plot_resolution=20
+
 
         # Add asset
         self.spy = self.AddEquity("SPY", Resolution.Minute).Symbol
@@ -18,7 +22,6 @@ class ReverseFromHighLow(QCAlgorithm):
         thirtyMinuteConsolidator.DataConsolidated += self.ThirtyMinuteBarHandler
         self.SubscriptionManager.AddConsolidator("SPY", thirtyMinuteConsolidator)
 
-        self.plot_resolution=1
 
         # Tracking info:
         self.previous_high = None
@@ -53,8 +56,9 @@ class ReverseFromHighLow(QCAlgorithm):
         pass
  
     def ThirtyMinuteBarHandler(self, sender, bar):
-        if not self.AreIndicatorsReady(bar):
+        if not self.update_and_check_indicators(bar):
             return
+
         if not self.Portfolio.Invested:
             #Decide to invest here
             signal = self.check_stochastic_crossover()
@@ -67,34 +71,10 @@ class ReverseFromHighLow(QCAlgorithm):
                    and not self.trade_on_next_cross_up \
                    and signal==-1:#sell
                 orderTicket = self.SetHoldings("SPY",-1.0,False,"short")
-                return
-                
-                
-            
-            #Look for shorts higher highs on RSI, lower lows for price
-            if self.ema200Win[1]>self.ema200Win[0]:
-                if (not self.trade_on_next_cross_down) or self.trade_on_next_cross_up:
-                    #Check for high on RSI:
-                    for lm,lm_ind in self.rsiLocalMaxs:
-                        #New high on RSI!
-                        if self.rsi.Current.Value > lm:
-                            #Check for lower lows on price
-                            if bar.Close < self.priceWin[lm_ind]:
-                                #We will trade, trigger:
-                                self.trade_on_next_cross_down=True
-                                self.trade_on_next_cross_up=False
+                return True
+                        
+            self.decide_to_invest(bar)
 
-            #Look for longs
-            else:
-                #Check for low on RSI:
-                if (self.trade_on_next_cross_down) or not self.trade_on_next_cross_up:
-                    for lm,lm_ind in self.rsiLocalMins:
-                        if self.rsi.Current.Value < lm:
-                            #Check for higher highs on price
-                            if bar.Close > self.priceWin[lm_ind]:
-                                #We will trade, trigger:
-                                self.trade_on_next_cross_down=False
-                                self.trade_on_next_cross_up=True
 
         #Plot example:
         self.bar_count += 1
@@ -103,10 +83,11 @@ class ReverseFromHighLow(QCAlgorithm):
         # if self.rsi.IsReady and self.bar_count%50 == 0:
         #      self.Plot("Overlay Plot", "rsi", self.rsi.Current.Value)
         if self.ema200.IsReady and self.bar_count%self.plot_resolution == 0:
-             self.Plot("Overlay Plot", "ema", self.ema200.Current.Value)             
+             self.Plot("Overlay Plot", "ema", self.ema200.Current.Value)
+             self.Plot("Overlay Plot", "equity",self.Portfolio.TotalPortfolioValue/10000*253)
         return
 
-    def AreIndicatorsReady(self, consolidated):
+    def update_and_check_indicators(self, consolidated):
         if self.rsi.IsReady and self.sto.IsReady and self.ema200.IsReady:
             # if indicators are ready, create rolling window for them
             self.rsiWin.Add(self.rsi.Current.Value)
@@ -153,6 +134,34 @@ class ReverseFromHighLow(QCAlgorithm):
         else:
             return 0
             
+    def decide_to_invest(self,bar):
+        #Look for shorts higher highs on RSI, lower lows for price
+        if self.ema200Win[0]>bar.Close:
+            if (not self.trade_on_next_cross_down) or self.trade_on_next_cross_up:
+                #Check for high on RSI:
+                for lm,lm_ind in self.rsiLocalMaxs:
+                    #New high on RSI!
+                    if self.rsi.Current.Value > lm:
+                        #Check for lower lows on price
+                        if bar.Close < self.priceWin[lm_ind]:
+                            #We will trade, trigger:
+                            self.trade_on_next_cross_down=True
+                            self.trade_on_next_cross_up=False
+                            return True
+        #Look for longs
+        else:
+            #Check for low on RSI:
+            if (self.trade_on_next_cross_down) or not self.trade_on_next_cross_up:
+                for lm,lm_ind in self.rsiLocalMins:
+                    if self.rsi.Current.Value < lm:
+                        #Check for higher highs on price
+                        if bar.Close > self.priceWin[lm_ind]:
+                            #We will trade, trigger:
+                            self.trade_on_next_cross_down=False
+                            self.trade_on_next_cross_up=True
+                            return True
+        return False
+                                
     def OnOrderEvent(self, orderEvent):
         if orderEvent.Status == OrderStatus.Filled:
             order = self.Transactions.GetOrderById(orderEvent.OrderId)
